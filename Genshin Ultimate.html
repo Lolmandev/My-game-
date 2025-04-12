@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Genshin Infinite RPG</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #222; color: #fff; font-family: Arial, sans-serif; overflow: hidden; }
+    canvas { background: radial-gradient(#444, #111); display: block; }
+    #ui {
+      position: absolute; top: 10px; left: 10px;
+      background: rgba(0, 0, 0, 0.6); padding: 12px;
+      border-radius: 10px; font-size: 14px;
+    }
+    button { margin: 2px; padding: 5px; }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+  <div id="ui">
+    <p><strong>HP:</strong> <span id="hp"></span> | <strong>Mana:</strong> <span id="mana"></span></p>
+    <p><strong>Level:</strong> <span id="level"></span> | <strong>XP:</strong> <span id="xp"></span>/<span id="xpToNext"></span></p>
+    <p><strong>Inventory:</strong> Potions: <span id="potions"></span>, Gems: <span id="gems"></span></p>
+    <p><strong>Equipped:</strong> <span id="equipped"></span></p>
+    <button onclick="castSpell('fire')">Fire</button>
+    <button onclick="castSpell('ice')">Ice</button>
+    <button onclick="castSpell('lightning')">Lightning</button>
+    <button onclick="useItem('potion')">Use Potion</button>
+    <button onclick="switchCharacter()">Switch Character</button>
+    <button onclick="teleport()">Teleport</button>
+  </div>
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = innerWidth;
+    canvas.height = innerHeight;
+
+    const keys = {};
+    let currentChar = 0;
+    const characters = [
+      { name: 'Aether', color: 'cyan', element: 'fire' },
+      { name: 'Luna', color: 'magenta', element: 'ice' },
+      { name: 'Zed', color: 'yellow', element: 'lightning' }
+    ];
+
+    const player = {
+      x: canvas.width / 2,
+      y: canvas.height / 2,
+      size: 30,
+      hp: 100,
+      mana: 100,
+      level: 1,
+      xp: 0,
+      xpToNext: 100,
+      inventory: { potion: 3, gems: 5 },
+      speed: 4,
+      get color() { return characters[currentChar].color; },
+      get name() { return characters[currentChar].name; },
+      get element() { return characters[currentChar].element; }
+    };
+
+    let enemies = Array.from({ length: 5 }, createEnemy);
+
+    function createEnemy() {
+      return {
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        size: 20,
+        color: 'red',
+        speed: 1.5,
+        type: ['fire', 'ice', 'lightning'][Math.floor(Math.random() * 3)]
+      };
+    }
+
+    function updateUI() {
+      document.getElementById("hp").textContent = Math.floor(player.hp);
+      document.getElementById("mana").textContent = Math.floor(player.mana);
+      document.getElementById("level").textContent = player.level;
+      document.getElementById("xp").textContent = player.xp;
+      document.getElementById("xpToNext").textContent = player.xpToNext;
+      document.getElementById("potions").textContent = player.inventory.potion;
+      document.getElementById("gems").textContent = player.inventory.gems;
+      document.getElementById("equipped").textContent = `${player.name} (${player.element})`;
+    }
+
+    function switchCharacter() {
+      currentChar = (currentChar + 1) % characters.length;
+      alert("Switched to: " + player.name);
+      updateUI();
+    }
+
+    function teleport() {
+      if (player.inventory.gems > 0) {
+        player.inventory.gems--;
+        player.x = Math.random() * canvas.width;
+        player.y = Math.random() * canvas.height;
+        updateUI();
+      } else {
+        alert("No gems left to teleport!");
+      }
+    }
+
+    function movePlayer() {
+      if (keys['ArrowUp']) player.y -= player.speed;
+      if (keys['ArrowDown']) player.y += player.speed;
+      if (keys['ArrowLeft']) player.x -= player.speed;
+      if (keys['ArrowRight']) player.x += player.speed;
+    }
+
+    function moveEnemies() {
+      enemies.forEach(enemy => {
+        let dx = player.x - enemy.x;
+        let dy = player.y - enemy.y;
+        let dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > 1) {
+          enemy.x += (dx / dist) * enemy.speed;
+          enemy.y += (dy / dist) * enemy.speed;
+        }
+        if (dist < player.size + enemy.size) {
+          player.hp -= 0.3;
+          if (player.hp <= 0) {
+            alert("You Died. Game Over.");
+            location.reload();
+          }
+        }
+      });
+    }
+
+    function castSpell(type) {
+      if (player.mana < 25) {
+        alert("Not enough mana!");
+        return;
+      }
+      player.mana -= 25;
+      let defeated = 0;
+      enemies = enemies.filter(enemy => {
+        let dx = player.x - enemy.x;
+        let dy = player.y - enemy.y;
+        let dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 100 && (type === player.element || enemy.type !== type)) {
+          defeated++;
+          return false;
+        }
+        return true;
+      });
+      if (defeated > 0) gainXP(defeated * 25);
+      if (enemies.length === 0) {
+        enemies = Array.from({ length: 5 + player.level }, createEnemy);
+      }
+      updateUI();
+    }
+
+    function useItem(item) {
+      if (player.inventory[item] > 0) {
+        player.inventory[item]--;
+        if (item === 'potion') player.hp = Math.min(100, player.hp + 30);
+        updateUI();
+      } else {
+        alert("No " + item + "s left!");
+      }
+    }
+
+    function gainXP(amount) {
+      player.xp += amount;
+      while (player.xp >= player.xpToNext) {
+        player.xp -= player.xpToNext;
+        player.level++;
+        player.hp = 100;
+        player.mana = 100;
+        player.xpToNext += 50;
+        alert("Level up! You're now level " + player.level);
+      }
+    }
+
+    function drawCircle(obj) {
+      ctx.fillStyle = obj.color;
+      ctx.beginPath();
+      ctx.arc(obj.x, obj.y, obj.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawGame() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawCircle(player);
+      enemies.forEach(drawCircle);
+    }
+
+    function gameLoop() {
+      movePlayer();
+      moveEnemies();
+      drawGame();
+      updateUI();
+      requestAnimationFrame(gameLoop);
+    }
+
+    window.addEventListener("keydown", e => keys[e.key] = true);
+    window.addEventListener("keyup", e => keys[e.key] = false);
+
+    updateUI();
+    gameLoop();
+  </script>
+</body>
+</html>
